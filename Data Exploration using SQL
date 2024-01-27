@@ -1,0 +1,178 @@
+/*
+Covid-19 Data Exploration 
+Source: https://ourworldindata.org/covid-deaths
+Skills used: Joins, CTE's, Temp Tables, Windows Functions, Aggregate Functions, Creating Views, Converting Data Types
+
+-- NOTE: You can't use Sum of new vaccinations as Total vaccination instead Max of Total vaccinations is used, because there are some countries that did not record their new vaccinations 
+-- such as Armenia, American Samoa, Angola, Austria, Belarus YET total vaccinations and people vaccinated do have records
+-- Also, daily administered vaccinations doesn't really matter. Instead, the total vaccinations recorded makes more sense
+
+*/
+
+-- 1. Total Deaths vs Total Cases vs Death Percentage view
+-- New cases represents the daily cases represented
+
+Create view DeathPercentage as
+Select SUM(new_cases) as Total_cases, SUM(new_deaths) as Total_deaths, SUM(new_deaths)/SUM(New_Cases)*100 as DeathPercentage
+From covid_deaths
+order by 1,2;
+
+-- 1a. Total Vaccinations, Total Population and Vaccination Percentage view
+
+Create view VaccinationPercentage as
+Select SUM(total_vaccinations) as Total_vaccs, SUM(Population) as Total_population, SUM(total_vaccinations)/SUM(Population)*100 as TotalVaccPercent
+, SUM(people_vaccinated)/SUM(Population)*100 as People_vaccPercent, SUM(people_fully_vaccinated)/SUM(Population)*100 as Fully_vaccPercent
+, SUM(total_boosters)/SUM(Population)*100 as boosterPercent
+
+, SUM(people_vaccinated) as Total_People_vacc
+, SUM(people_fully_vaccinated) as Total_Fully_vacc
+, SUM(total_boosters) as Total_boosters
+From covid_deaths dea
+JOIN covid_vaccinations vac
+    ON dea.location = vac.location
+    AND dea.date = vac.date
+where dea.continent is null 
+and dea.location in ('Europe', 'North America', 'South America', 'Asia', 'Africa', 'Oceania');
+
+-- 2. Global record of total vaccinations, people vaccinated, people fully vaccinated and total boosters
+
+Create view WorldVacRecord as
+Select SUM(total_vaccinations) as Total_vaccinations, SUM(people_vaccinated) as People_vaccinated, SUM(people_fully_vaccinated) as People_fully_vaccinated
+, SUM(total_boosters) as Total_boosters
+From covid_vaccinations
+where continent is null 
+and location in ('Europe', 'North America', 'South America', 'Asia', 'Africa', 'Oceania');
+
+-- 3. This is showing the Highest vaccination count, people vaccinated percentage, people fully vaccinated percentage,
+-- and booster percentage for all countries
+
+Create view countriesVacpercentage as
+SELECT dea.location, dea.population , MAX(vac.total_vaccinations) as HighestVaccinationCount
+, Max((vac.people_vaccinated / dea.population))* 100 as PeopleVacPercentage
+, Max((vac.people_fully_vaccinated / dea.population))* 100 as PeopleFullyVacPercentage
+, Max((vac.total_boosters / dea.population))* 100 as TotalBoostersPercentage
+
+FROM covid_deaths dea
+JOIN covid_vaccinations vac
+    ON dea.location = vac.location
+    AND dea.date = vac.date
+WHERE dea.continent is not NULL
+AND dea.location not in ('Europe', 'North America', 'South America', 'Asia', 'Africa', 'Oceania')
+Group by dea.population, dea.location
+order by HighestVaccinationCount desc;
+
+
+-- 4. Total Death count across continents in Descending order
+
+Create view continentDeathCount as
+Select location, SUM(new_deaths) as TotalDeathCount
+From covid_deaths
+Where continent is null 
+and location in ('Europe', 'North America', 'South America', 'Asia', 'Africa', 'Oceania')
+Group by location
+order by TotalDeathCount desc;
+
+-- 5. Total Death count across countries in Descending order
+
+Create view deathCountriesCount as
+Select location, SUM(new_deaths) as TotalDeathCount
+From covid_deaths
+Where continent is not null 
+and location not in ('Europe', 'North America', 'South America', 'Asia', 'Africa', 'Oceania')
+Group by location
+order by TotalDeathCount desc;
+
+-- 6. Total Vaccination, People Vaccinated, People Fully vaccinated, and Total booster across continents in Descending order
+
+Create view continentVacRecord as
+SELECT location, MAX(total_vaccinations) as TotalVaccinations, MAX(people_vaccinated) as PeopleVaccinated, MAX(people_fully_vaccinated) as FullyVaccinated
+ , MAX(total_boosters) as TotalBoosters
+FROM covid_vaccinations
+Where continent is null 
+and location in ('Europe', 'North America', 'South America', 'Asia', 'Africa', 'Oceania')
+Group by location
+order by TotalVaccinations desc;
+
+-- 7. Total Vaccination, People Vaccinated, People Fully vaccinated, and Total booster across countries in Descending order
+
+Create view countriesVacCount as
+SELECT location, MAX(total_vaccinations) as TotalVaccinations, MAX(people_vaccinated) as PeopleVaccinated, MAX(people_fully_vaccinated) as FullyVaccinated
+ , MAX(total_boosters) as TotalBoosters
+FROM covid_vaccinations
+Where continent is not null 
+and location not in ('Europe', 'North America', 'South America', 'Asia', 'Africa', 'Oceania')
+Group by location
+order by TotalVaccinations desc;
+
+-- 8. Looking at the Highest Infection rate compared to Highest percentage_population_infected across continents
+
+Create view continentPercentInfected as
+Select Location, Population, MAX(total_cases) as HighestInfectionCount,  Max((total_cases/population))*100 as PercentPopulationInfected
+From covid_deaths
+Where continent is null 
+and location in ('Europe', 'North America', 'South America', 'Asia', 'Africa', 'Oceania')
+Group by Location, Population
+order by PercentPopulationInfected desc;
+
+-- 9. Looking at the Highest Infection rate compared to Highest percentage_population_infected across countries
+
+Create view countriesPercentInfected as
+Select Location, Population, MAX(total_cases) as HighestInfectionCount,  Max((total_cases/population))*100 as PercentPopulationInfected
+From covid_deaths
+Where continent in ('Europe', 'North America', 'South America', 'Asia', 'Africa', 'Oceania')
+Group by Location, Population
+-- order by PercentPopulationInfected desc;
+order by PercentPopulationInfected desc;
+
+-- 10. percentage infected grouped by date
+create view datepercentinfected as
+Select Location, Population,date, MAX(total_cases) as HighestInfectionCount,  Max((total_cases/population))*100 as PercentPopulationInfected
+From covid_deaths
+-- Where location like '%states%'
+Group by Location, Population, date
+order by PercentPopulationInfected desc;
+
+-- 11. Rolling count for New_Vaccinations (This shows the percentage of people vaccinated in that location)
+
+Create view percentageRollingPeopleVac as
+With PopvsTotalVac (continent, location, date, population, total_vaccinations, HighestRollingPeopleVac)
+as
+(
+	Select dea.continent, dea.location, dea.date, dea.population, vac.total_vaccinations
+    , MAX(vac.total_vaccinations) OVER (partition by dea.location order by dea.location, dea.Date ) as HighestRollingPeopleVac
+    -- , (RollingPeopleVaccinated/population) * 100
+    From covid_deaths dea
+    Join covid_vaccinations vac
+    On dea.location = vac.location
+    and dea.date = vac.date
+    Where dea.continent is not NULL
+    order by 2, 3
+)
+Select *, (HighestRollingPeopleVac/population) * 100 as percentageVaccinated
+From PopvsTotalVac;
+
+-- 12. Rolling count for New_Vaccinations (This shows the percentage of people vaccinated in that location)
+
+DROP Table if exists PercentagePopulationVaccinated;
+
+CREATE Temporary Table PercentagePopulationVaccinated (
+	continent text,
+	Location text,
+	Date datetime,
+	Population numeric,
+	total_vaccinations numeric,
+	HighestRollingPeopleVac numeric );
+Insert into PercentagePopulationVaccinated
+Select dea.continent, dea.location, dea.date, dea.population, vac.total_vaccinations
+    , MAX(vac.total_vaccinations) OVER (partition by dea.location order by dea.location, dea.Date ) as HighestRollingPeopleVac
+    -- , (RollingPeopleVaccinated/population) * 100
+    From covid_deaths dea
+    Join covid_vaccinations vac
+    On dea.location = vac.location
+    and dea.date = vac.date
+    Where dea.continent is not NULL;
+    -- order by dea.location, dea.Date
+    
+Select *, (HighestRollingPeopleVac/population) * 100 as percentageVaccinated
+From PercentagePopulationVaccinated;
+
